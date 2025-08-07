@@ -6,6 +6,7 @@ import tkinter as tk
 import os
 from nfc_writer import write_nfc
 
+
 # ---------- Load Wi-Fi credentials from selected_network.json ----------
 def load_selected_network():
     try:
@@ -52,7 +53,17 @@ def launch_gui(qr_img):
         print("⚠️ Logo not found:", e)
         canvas.create_text(160, 420, text="wi-pi", fill="white", font=("Helvetica", 24, "bold"))
 
-    root.mainloop()
+# Background NFC Writer Thread
+def run_nfc():
+    try:
+        from nfc_writer import write_nfc_tag
+        write_nfc_tag()
+    except Exception as e:
+        print(f"NFC thread error: {e}")
+
+threading.Thread(target=run_nfc, daemon=True).start()
+
+root.mainloop()
 
 # ---------- Main ----------
 if __name__ == "__main__":

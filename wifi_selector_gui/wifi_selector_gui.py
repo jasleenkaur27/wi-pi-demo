@@ -1,12 +1,12 @@
 import sys
 import json
+import subprocess
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox, QInputDialog
+    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
-import os
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -60,27 +60,35 @@ class WifiSelector(QWidget):
         self.network_list = QListWidget()
         self.network_list.setStyleSheet("QListWidget { background-color: #2e2e2e; border: none; } QListWidget::item { padding: 10px; }")
 
-        self.networks = ["ptest", "sait-guest", "sait-mpsk", "CCL-SAIT", "CCL-SAIT_EXT"]
+        # Get list of networks using nmcli
+        self.networks = self.get_available_networks()
         for network in self.networks:
             item = QListWidgetItem(QIcon("/home/pi/wi-pi-demo/icons/lock.png"), network)
             self.network_list.addItem(item)
 
-        self.network_list.itemClicked.connect(self.save_selected_network)
+        self.network_list.itemClicked.connect(self.handle_network_selection)
 
         layout.addWidget(self.network_list)
         self.setLayout(layout)
 
-    def save_selected_network(self, item):
-        ssid = item.text()
-        password, ok = QInputDialog.getText(self, "Wi-Fi Password", f"Enter password for {ssid}:")
-        if ok and password:
-            selected_data = {
-                "wifi_name": ssid,
-                "wifi_password": password
-            }
-            with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
-                json.dump(selected_data, f)
-            print(f" Saved: {selected_data}")
+    def get_available_networks(self):
+        import subprocess
+        result = subprocess.run(["nmcli", "-t", "-f", "SSID", "dev", "wifi"], stdout=subprocess.PIPE)
+        output = result.stdout.decode("utf-8")
+        networks = list(set([line.strip() for line in output.split("\n") if line.strip()]))
+        return networks
+
+    def handle_network_selection(self, item):
+        selected_network = item.text()
+        selected_data = {
+            "wifi_name": selected_network,
+            "wifi_password": "securepass123"  # or prompt for password
+        }
+        with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
+            json.dump(selected_data, f)
+
+        # Launch main_screen.py to show QR + NFC
+        subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

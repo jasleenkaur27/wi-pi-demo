@@ -1,58 +1,29 @@
+import nfc
 import time
-import board
-import busio
-from digitalio import DigitalInOut
-from adafruit_pn532.uart import PN532_UART
 import json
 
-# ---------- Read selected network ----------
-def read_selected_network():
+def write_nfc_tag():
     try:
         with open("selected_network.json", "r") as f:
             data = json.load(f)
-            return data.get("wifi_name", ""), data.get("wifi_password", "")
+            ssid = data.get("wifi_name", "")
+            password = data.get("wifi_password", "")
     except Exception as e:
-        print(f"[NFC]  Could not read selected network: {e}")
-        return "", ""
+        print(f"Failed to load Wi-Fi credentials: {e}")
+        return
 
-# ---------- NFC Writing ----------
-def write_nfc():
-    print("[NFC] Starting NFC background writer...")
-    
-    uart = busio.UART(board.TX, board.RX, baudrate=115200, timeout=1)
-    reset_pin = DigitalInOut(board.D6)
-    req_pin = DigitalInOut(board.D12)
-    
-    pn532 = PN532_UART(uart, debug=False, reset=reset_pin, req=req_pin)
-    pn532.SAM_configuration()
+    wifi_payload = f"WIFI:T:WPA;S:{ssid};P:{password};;"
 
-    while True:
-        print("[NFC] Waiting for NFC tag...")
-        uid = pn532.read_passive_target(timeout=5)
-        
-        if uid is None:
-            continue  # No tag detected
+    clf = nfc.ContactlessFrontend('/dev/ttyS0')  # UART port
+    print("Touch NFC tag to write Wi-Fi credentials...")
 
-        print(f"[NFC] Tag detected with UID: {uid.hex()}")
-
-        ssid, password = read_selected_network()
-        if not ssid or not password:
-            print("[NFC] Missing SSID or password.")
-            continue
-
-        wifi_payload = f"WIFI:T:WPA;S:{ssid};P:{password};;"
-        text_bytes = bytearray(wifi_payload, "utf-8")
-
+    def connected(tag):
         try:
-            success = pn532.ntag2xx_write_block(4, text_bytes[:4])
-            if not success:
-                print("[NFC]  Failed to write block 4")
-                continue
-
-            print(f"[NFC]  Wi-Fi info written: {ssid}")
-            time.sleep(5)  # Pause after successful write
-
+            tag.ndef.message = nfc.ndef.Message(nfc.ndef.TextRecord(wifi_payload))
+            print(" NFC Tag written successfully!")
         except Exception as e:
-            print(f"[NFC] ⚠️ Exception during write: {e}")
-            time.sleep(2)
+            print(f" Failed to write NFC Tag: {e}")
+        return True
 
+    clf.connect(rdwr={'on-connect': connected})
+    clf.close()
