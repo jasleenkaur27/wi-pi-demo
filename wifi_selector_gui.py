@@ -1,13 +1,22 @@
 import sys
-import subprocess
 import json
+import subprocess
 import os
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox, QMessageBox
+    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox, QScrollArea
 )
-from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PyQt5.QtGui import QFont, QIcon, QColor, QPixmap
 from PyQt5.QtCore import Qt
+
+def scan_wifi_networks():
+    try:
+        result = subprocess.run(['nmcli', '-t', '-f', 'SSID', 'dev', 'wifi'], stdout=subprocess.PIPE)
+        ssids = set(result.stdout.decode().splitlines())
+        return sorted([ssid for ssid in ssids if ssid])
+    except Exception as e:
+        print(f"Wi-Fi scan failed: {e}")
+        return []
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -18,72 +27,28 @@ class WifiSelector(QWidget):
 
         layout = QVBoxLayout()
 
-        # Header
-        header = QLabel("Internet")
+        header = QLabel("Select Wi-Fi Network")
         header.setFont(QFont("Arial", 16, QFont.Bold))
-        header.setAlignment(Qt.AlignLeft)
+        header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
-
-        # Toggle Wi-Fi
-        toggle_layout = QHBoxLayout()
-        self.toggle_wifi = QCheckBox("Use Wi-Fi")
-        self.toggle_wifi.setChecked(True)
-        self.toggle_wifi.setStyleSheet("QCheckBox { font-size: 14px; }")
-        toggle_layout.addWidget(self.toggle_wifi)
-        layout.addLayout(toggle_layout)
-
-        # Connected Network Display
-        connected_box = QWidget()
-        connected_layout = QHBoxLayout()
-        connected_box.setLayout(connected_layout)
-        connected_box.setStyleSheet("background-color: #3c3f41; padding: 10px; border-radius: 10px;")
-
-        wifi_icon = QLabel()
-        wifi_icon.setPixmap(QPixmap("/home/pi/wi-pi-demo/icons/wifi.png").scaled(20, 20))
-        connected_layout.addWidget(wifi_icon)
-
-        connected_label = QLabel("eduroam  (Connected)")
-        connected_label.setStyleSheet("font-size: 13px;")
-        connected_layout.addWidget(connected_label)
-
-        settings_icon = QLabel()
-        settings_icon.setPixmap(QPixmap("/home/pi/wi-pi-demo/icons/settings.png").scaled(20, 20))
-        settings_icon.setAlignment(Qt.AlignRight)
-        connected_layout.addWidget(settings_icon)
-
-        layout.addWidget(connected_box)
-
-        # Networks List
-        networks_label = QLabel("Networks")
-        networks_label.setStyleSheet("font-size: 14px; margin-top: 10px;")
-        layout.addWidget(networks_label)
 
         self.network_list = QListWidget()
         self.network_list.setStyleSheet("QListWidget { background-color: #2e2e2e; border: none; } QListWidget::item { padding: 10px; }")
 
-        networks = ["ptest", "sait-guest", "sait-mpsk", "CCL-SAIT", "CCL-SAIT_EXT"]
-        for network in networks:
-            item = QListWidgetItem(QIcon("/home/pi/wi-pi-demo/icons/lock.png"), network)
+        networks = scan_wifi_networks()
+        for ssid in networks:
+            item = QListWidgetItem(QIcon("/home/pi/wi-pi-demo/icons/lock.png"), ssid)
             self.network_list.addItem(item)
 
-        self.network_list.itemClicked.connect(self.on_network_selected)
-
+        self.network_list.itemClicked.connect(self.select_network)
         layout.addWidget(self.network_list)
         self.setLayout(layout)
 
-    def on_network_selected(self, item):
-        selected_ssid = item.text()
-        default_password = "securepass123"
-
-        network_data = {
-            "wifi_name": selected_ssid,
-            "wifi_password": default_password
-        }
-
+    def select_network(self, item):
+        ssid = item.text()
+        password = "securepass123"  # Replace with password prompt logic if needed
         with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
-            json.dump(network_data, f)
-
-        QMessageBox.information(self, "Wi-Fi Selected", f"{selected_ssid} selected.\nLaunching QR & NFC screen...")
+            json.dump({"wifi_name": ssid, "wifi_password": password}, f)
 
         subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
         self.close()

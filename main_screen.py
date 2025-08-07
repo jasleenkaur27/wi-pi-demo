@@ -9,7 +9,7 @@ from nfc_writer import write_nfc
 # ---------- Load Wi-Fi credentials from selected_network.json ----------
 def load_selected_network():
     try:
-        with open("selected_network.json", "r") as f:
+        with open("/home/pi/wi-pi-demo/selected_network.json", "r") as f:
             data = json.load(f)
             return data["wifi_name"], data["wifi_password"]
     except Exception as e:
@@ -22,7 +22,7 @@ def generate_qr_image(ssid, password):
     qr = qrcode.QRCode(box_size=10, border=2)
     qr.add_data(qr_data)
     qr.make(fit=True)
-    return qr.make_image(fill="black", back_color="white"), qr_data
+    return qr.make_image(fill="black", back_color="white")
 
 # ---------- GUI ----------
 def launch_gui(qr_img):
@@ -41,10 +41,10 @@ def launch_gui(qr_img):
     qr_display = Image.open("temp_qr.png")
     qr_tk = ImageTk.PhotoImage(qr_display)
     canvas.create_image(50, 70, anchor=tk.NW, image=qr_tk)
-    root.qr_tk = qr_tk  # Keep reference
+    root.qr_tk = qr_tk  # Prevent garbage collection
 
     try:
-        logo_img = Image.open("wi-pi-logo.png").resize((120, 60))
+        logo_img = Image.open("/home/pi/wi-pi-demo/wi-pi-logo.png").resize((120, 60))
         logo_tk = ImageTk.PhotoImage(logo_img)
         canvas.create_image(100, 400, anchor=tk.NW, image=logo_tk)
         root.logo_tk = logo_tk
@@ -57,12 +57,10 @@ def launch_gui(qr_img):
 # ---------- Main ----------
 if __name__ == "__main__":
     wifi_name, wifi_password = load_selected_network()
+    qr_img = generate_qr_image(wifi_name, wifi_password)
 
-    # Generate QR
-    qr_img, qr_data = generate_qr_image(wifi_name, wifi_password)
+    # Start NFC writer in background
+    threading.Thread(target=write_nfc, args=(wifi_name, wifi_password), daemon=True).start()
 
-    # Start NFC in background
-    threading.Thread(target=write_nfc, args=(qr_data,), daemon=True).start()
-
-    # Show GUI
+    # Show QR GUI
     launch_gui(qr_img)
