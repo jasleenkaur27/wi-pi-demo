@@ -1,11 +1,12 @@
 import sys
-import subprocess
+import json
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox
+    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox, QInputDialog
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
+import os
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -40,7 +41,7 @@ class WifiSelector(QWidget):
         wifi_icon.setPixmap(QPixmap("/home/pi/wi-pi-demo/icons/wifi.png").scaled(20, 20))
         connected_layout.addWidget(wifi_icon)
 
-        connected_label = QLabel(self.get_connected_network())
+        connected_label = QLabel("eduroam  (Connected)")
         connected_label.setStyleSheet("font-size: 13px;")
         connected_layout.addWidget(connected_label)
 
@@ -51,50 +52,35 @@ class WifiSelector(QWidget):
 
         layout.addWidget(connected_box)
 
-        # Networks Label
+        # Networks List
         networks_label = QLabel("Networks")
         networks_label.setStyleSheet("font-size: 14px; margin-top: 10px;")
         layout.addWidget(networks_label)
 
-        # Network List
         self.network_list = QListWidget()
-        self.network_list.setStyleSheet("""
-            QListWidget { background-color: #2e2e2e; border: none; }
-            QListWidget::item { padding: 10px; }
-        """)
+        self.network_list.setStyleSheet("QListWidget { background-color: #2e2e2e; border: none; } QListWidget::item { padding: 10px; }")
 
-        networks = self.scan_wifi_networks()
-        for network in networks:
+        self.networks = ["ptest", "sait-guest", "sait-mpsk", "CCL-SAIT", "CCL-SAIT_EXT"]
+        for network in self.networks:
             item = QListWidgetItem(QIcon("/home/pi/wi-pi-demo/icons/lock.png"), network)
             self.network_list.addItem(item)
+
+        self.network_list.itemClicked.connect(self.save_selected_network)
 
         layout.addWidget(self.network_list)
         self.setLayout(layout)
 
-    def scan_wifi_networks(self):
-        try:
-            result = subprocess.check_output(["sudo", "iwlist", "wlan0", "scan"], stderr=subprocess.DEVNULL).decode()
-            ssids = set()
-            for line in result.splitlines():
-                line = line.strip()
-                if line.startswith("ESSID:"):
-                    ssid = line.split("ESSID:")[1].strip().strip('"')
-                    if ssid:
-                        ssids.add(ssid)
-            return sorted(ssids)
-        except Exception as e:
-            print(f"Error scanning Wi-Fi: {e}")
-            return ["No networks found"]
-
-    def get_connected_network(self):
-        try:
-            result = subprocess.check_output(["iwgetid", "-r"]).decode().strip()
-            if result:
-                return f"{result} (Connected)"
-            else:
-                return "Not connected"
-        except:
-            return "Not connected"
+    def save_selected_network(self, item):
+        ssid = item.text()
+        password, ok = QInputDialog.getText(self, "Wi-Fi Password", f"Enter password for {ssid}:")
+        if ok and password:
+            selected_data = {
+                "wifi_name": ssid,
+                "wifi_password": password
+            }
+            with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
+                json.dump(selected_data, f)
+            print(f" Saved: {selected_data}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

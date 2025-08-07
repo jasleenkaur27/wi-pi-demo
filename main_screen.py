@@ -1,19 +1,19 @@
 import qrcode
-from PIL import Image, ImageDraw, ImageFont, ImageTk
+from PIL import Image, ImageTk
 import json
-import time
 import threading
-import os
 import tkinter as tk
-#from nfc_writer import write_nfc
+import os
+from nfc_writer import write_nfc
 
-# ---------- Load Wi-Fi credentials ----------
-def load_credentials():
+# ---------- Load Wi-Fi credentials from selected_network.json ----------
+def load_selected_network():
     try:
-        with open("wifi_credentials.json", "r") as f:
+        with open("selected_network.json", "r") as f:
             data = json.load(f)
             return data["wifi_name"], data["wifi_password"]
-    except Exception:
+    except Exception as e:
+        print("⚠️ Error loading selected network:", e)
         return "WiPi_Network", "securepass123"
 
 # ---------- Generate QR Code ----------
@@ -44,23 +44,25 @@ def launch_gui(qr_img):
     root.qr_tk = qr_tk  # Keep reference
 
     try:
-        logo_img = Image.open("wi-pi-logo.png").resize((120, 75))
+        logo_img = Image.open("wi-pi-logo.png").resize((120, 60))
         logo_tk = ImageTk.PhotoImage(logo_img)
-        canvas.create_image(100, 350, anchor=tk.NW, image=logo_tk)
-        root.logo_tk = logo_tk  # Keep reference
+        canvas.create_image(100, 400, anchor=tk.NW, image=logo_tk)
+        root.logo_tk = logo_tk
     except Exception as e:
-        print("⚠️ Logo not found or failed to load:", e)
+        print("⚠️ Logo not found:", e)
         canvas.create_text(160, 420, text="wi-pi", fill="white", font=("Helvetica", 24, "bold"))
 
     root.mainloop()
 
 # ---------- Main ----------
 if __name__ == "__main__":
-    wifi_name, wifi_password = load_credentials()
+    wifi_name, wifi_password = load_selected_network()
+
+    # Generate QR
     qr_img = generate_qr_image(wifi_name, wifi_password)
 
-    # NFC Writer 
-    #threading.Thread(target=write_nfc, args=(wifi_name, wifi_password), daemon=True).start()
+    # Start NFC in background
+    threading.Thread(target=write_nfc, args=(wifi_name, wifi_password), daemon=True).start()
 
     # Show GUI
     launch_gui(qr_img)
