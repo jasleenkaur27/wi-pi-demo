@@ -1,22 +1,11 @@
 import sys
+import os
 import json
 import subprocess
-import os
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox, QScrollArea
+    QApplication, QWidget, QVBoxLayout, QLabel, QListWidget, QListWidgetItem
 )
-from PyQt5.QtGui import QFont, QIcon, QColor, QPixmap
 from PyQt5.QtCore import Qt
-
-def scan_wifi_networks():
-    try:
-        result = subprocess.run(['nmcli', '-t', '-f', 'SSID', 'dev', 'wifi'], stdout=subprocess.PIPE)
-        ssids = set(result.stdout.decode().splitlines())
-        return sorted([ssid for ssid in ssids if ssid])
-    except Exception as e:
-        print(f"Wi-Fi scan failed: {e}")
-        return []
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -24,36 +13,45 @@ class WifiSelector(QWidget):
         self.setWindowTitle("Wi-Pi | Wi-Fi Selector")
         self.setStyleSheet("background-color: #1f1f1f; color: white;")
         self.setGeometry(100, 100, 320, 480)
+        self.layout = QVBoxLayout()
 
-        layout = QVBoxLayout()
-
-        header = QLabel("Select Wi-Fi Network")
-        header.setFont(QFont("Arial", 16, QFont.Bold))
-        header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
+        label = QLabel("Select Wi-Fi Network")
+        label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        self.layout.addWidget(label)
 
         self.network_list = QListWidget()
         self.network_list.setStyleSheet("QListWidget { background-color: #2e2e2e; border: none; } QListWidget::item { padding: 10px; }")
-
-        networks = scan_wifi_networks()
-        for ssid in networks:
-            item = QListWidgetItem(QIcon("/home/pi/wi-pi-demo/icons/lock.png"), ssid)
-            self.network_list.addItem(item)
-
         self.network_list.itemClicked.connect(self.select_network)
-        layout.addWidget(self.network_list)
-        self.setLayout(layout)
+
+        self.layout.addWidget(self.network_list)
+        self.setLayout(self.layout)
+        self.load_networks()
+
+    def load_networks(self):
+        try:
+            output = subprocess.check_output("nmcli -t -f SSID device wifi list", shell=True)
+            ssids = list(set([line.strip() for line in output.decode().split("\n") if line.strip()]))
+            for ssid in ssids:
+                self.network_list.addItem(QListWidgetItem(ssid))
+        except Exception as e:
+            print("Failed to scan networks:", e)
 
     def select_network(self, item):
-        ssid = item.text()
-        password = "securepass123"  # Replace with password prompt logic if needed
-        with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
-            json.dump({"wifi_name": ssid, "wifi_password": password}, f)
+        selected_ssid = item.text()
+        print("Selected:", selected_ssid)
 
+        with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
+            json.dump({
+                "wifi_name": selected_ssid,
+                "wifi_password": "changeme"
+            }, f)
+
+        # Launch main_screen.py
         subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
+
         self.close()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = WifiSelector()
     window.show()
