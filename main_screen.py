@@ -3,7 +3,7 @@ from PIL import Image, ImageTk
 import json
 import threading
 import tkinter as tk
-from nfc_writer import write_nfc
+from nfc_writer import write_nfc_tag
 
 def load_selected_network():
     try:
@@ -54,6 +54,7 @@ if __name__ == "__main__":
     wifi_name, wifi_password = load_selected_network()
     qr_img = generate_qr_image(wifi_name, wifi_password)
 
-    threading.Thread(target=write_nfc, args=(wifi_name, wifi_password), daemon=True).start()
+    threading.Thread(target=write_nfc_tag, daemon=True).start()
+
 
     launch_gui(qr_img)
