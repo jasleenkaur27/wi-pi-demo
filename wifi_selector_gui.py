@@ -7,7 +7,7 @@ import time
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QLineEdit, QMessageBox
+    QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QLineEdit
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
@@ -70,44 +70,28 @@ class WifiSelector(QWidget):
         print(f"Selected: {self.selected_ssid}")
 
         is_secured = self.secured_networks.get(self.selected_ssid, False)
-        password = ""
 
         if is_secured:
-            keyboard_process = subprocess.Popen(["onboard"])  # Launch on-screen keyboard
+            # Launch matchbox keyboard
+            subprocess.Popen(["matchbox-keyboard"])
 
-            # Use a custom password prompt
-            pw_prompt = QWidget()
-            pw_prompt.setWindowTitle(f"Enter Password for {self.selected_ssid}")
-            pw_prompt.setStyleSheet("background-color: #1e1e1e; color: white;")
-            pw_layout = QVBoxLayout()
+            # Ask for password
+            password, ok = QInputDialog.getText(
+                self,
+                f"Enter Password for {self.selected_ssid}",
+                "Password:",
+                QLineEdit.Password
+            )
 
-            label = QLabel(f"Password for {self.selected_ssid}:")
-            label.setFont(QFont("Arial", 12))
-            pw_layout.addWidget(label)
+            # Close the keyboard
+            subprocess.call(["pkill", "matchbox-keyboard"])
 
-            pw_input = QLineEdit()
-            pw_input.setEchoMode(QLineEdit.Password)
-            pw_input.setFont(QFont("Arial", 12))
-            pw_input.setStyleSheet("background-color: white; color: black;")
-            pw_layout.addWidget(pw_input)
+            if not ok or not password:
+                QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
+                return
 
-            submit_btn = QPushButton("Generate QR/NFC")
-            submit_btn.setStyleSheet("background-color: #007BFF; color: white; padding: 10px; font-size: 14px;")
-            pw_layout.addWidget(submit_btn)
-
-            def on_submit():
-                password_val = pw_input.text()
-                if not password_val:
-                    QMessageBox.warning(self, "Missing Password", "⚠️ Password is required.")
-                    return
-                self.password_input = password_val
-                keyboard_process.terminate()
-                pw_prompt.close()
-                self.save_and_launch()
-
-            submit_btn.clicked.connect(on_submit)
-            pw_prompt.setLayout(pw_layout)
-            pw_prompt.show()
+            self.password_input = password
+            self.save_and_launch()
         else:
             self.password_input = ""
             self.save_and_launch()
