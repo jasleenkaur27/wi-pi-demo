@@ -7,34 +7,10 @@ import time
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QDialog, QDialogButtonBox, QLineEdit, QInputDialog, QMessageBox
+    QListWidget, QListWidgetItem, QLineEdit, QDialog, QHBoxLayout, QMessageBox
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
-
-class PasswordDialog(QDialog):
-    def __init__(self, ssid):
-        super().__init__()
-        self.setWindowTitle(f"Enter Password for {ssid}")
-        self.setFixedSize(300, 120)
-
-        layout = QVBoxLayout()
-
-        self.password_input = QLineEdit()
-        self.password_input.setEchoMode(QLineEdit.Password)
-
-        layout.addWidget(QLabel("Password:"))
-        layout.addWidget(self.password_input)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-
-    def get_password(self):
-        return self.password_input.text()
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -90,60 +66,55 @@ class WifiSelector(QWidget):
                         networks.add(ssid)
 
     def select_network(self, item):
-    self.selected_ssid = item.text()
-    print(f"Selected: {self.selected_ssid}")
+        self.selected_ssid = item.text()
+        print(f"Selected: {self.selected_ssid}")
 
-    is_secured = self.secured_networks.get(self.selected_ssid, False)
-    password = ""
+        is_secured = self.secured_networks.get(self.selected_ssid, False)
+        password = ""
 
-    if is_secured:
-        # Launch matchbox-keyboard in a terminal that floats above
-        subprocess.Popen(["lxterminal", "-e", "matchbox-keyboard"])
+        if is_secured:
+            # Launch matchbox-keyboard in LXTerminal
+            subprocess.Popen(["lxterminal", "-e", "matchbox-keyboard"])
+            time.sleep(1)
 
-        # Small delay to ensure keyboard appears
-        time.sleep(1)
+            # Show password dialog
+            password_dialog = QDialog(self)
+            password_dialog.setWindowTitle(f"Enter Password for {self.selected_ssid}")
+            password_dialog.setStyleSheet("background-color: #1e1e1e; color: white;")
 
-        # Show password dialog
-        password_dialog = QDialog(self)
-        password_dialog.setWindowTitle(f"Enter Password for {self.selected_ssid}")
-        password_dialog.setStyleSheet("background-color: #1e1e1e; color: white;")
+            layout = QVBoxLayout(password_dialog)
+            label = QLabel("Password:")
+            label.setStyleSheet("font-size: 14px;")
+            layout.addWidget(label)
 
-        layout = QVBoxLayout(password_dialog)
-        label = QLabel("Password:")
-        label.setStyleSheet("font-size: 14px;")
-        layout.addWidget(label)
+            password_field = QLineEdit()
+            password_field.setEchoMode(QLineEdit.Password)
+            password_field.setStyleSheet("padding: 5px; font-size: 16px;")
+            layout.addWidget(password_field)
 
-        password_field = QLineEdit()
-        password_field.setEchoMode(QLineEdit.Password)
-        password_field.setStyleSheet("padding: 5px; font-size: 16px;")
-        layout.addWidget(password_field)
+            buttons = QHBoxLayout()
+            cancel_btn = QPushButton("Cancel")
+            ok_btn = QPushButton("OK")
+            cancel_btn.clicked.connect(password_dialog.reject)
+            ok_btn.clicked.connect(password_dialog.accept)
+            buttons.addWidget(cancel_btn)
+            buttons.addWidget(ok_btn)
+            layout.addLayout(buttons)
 
-        buttons = QHBoxLayout()
-        cancel_btn = QPushButton("Cancel")
-        ok_btn = QPushButton("OK")
-        cancel_btn.clicked.connect(password_dialog.reject)
-        ok_btn.clicked.connect(password_dialog.accept)
-        buttons.addWidget(cancel_btn)
-        buttons.addWidget(ok_btn)
-        layout.addLayout(buttons)
+            if password_dialog.exec_() == QDialog.Accepted:
+                password = password_field.text()
+            else:
+                subprocess.call(["pkill", "matchbox-keyboard"])
+                return
 
-        # Show and wait for user input
-        if password_dialog.exec_() == QDialog.Accepted:
-            password = password_field.text()
-        else:
             subprocess.call(["pkill", "matchbox-keyboard"])
-            return
 
-        # Kill keyboard after input
-        subprocess.call(["pkill", "matchbox-keyboard"])
+            if not password:
+                QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
+                return
 
-        if not password:
-            QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
-            return
-
-    self.password_input = password
-    self.save_and_launch()
-
+        self.password_input = password
+        self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
@@ -163,7 +134,6 @@ class WifiSelector(QWidget):
             print(f"Error saving network info: {e}")
             return
 
-        # Launch main_screen.py in background
         subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
         self.close()
 
