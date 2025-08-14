@@ -7,7 +7,7 @@ import time
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QLineEdit, QCheckBox
+    QListWidget, QListWidgetItem, QInputDialog, QMessageBox
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
@@ -20,6 +20,8 @@ class WifiSelector(QWidget):
         self.setGeometry(0, 0, 320, 480)
 
         self.selected_ssid = None
+        self.password_input = ""
+        self.secured_networks = {}
 
         layout = QVBoxLayout()
 
@@ -41,17 +43,6 @@ class WifiSelector(QWidget):
         self.network_list.itemClicked.connect(self.select_network)
         layout.addWidget(self.network_list)
 
-        # Password Field
-        self.password_input = QLineEdit()
-        self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setPlaceholderText("Enter Wi-Fi Password")
-        layout.addWidget(self.password_input)
-
-        # Toggle Password Visibility
-        self.show_password = QCheckBox("Show Password")
-        self.show_password.stateChanged.connect(self.toggle_password_visibility)
-        layout.addWidget(self.show_password)
-
         # Connect Button
         connect_button = QPushButton("✅ Connect & Generate QR/NFC")
         connect_button.clicked.connect(self.save_and_launch)
@@ -62,16 +53,6 @@ class WifiSelector(QWidget):
 
         # Start scanning in a thread
         threading.Thread(target=self.scan_networks, daemon=True).start()
-
-    def toggle_password_visibility(self):
-        if self.show_password.isChecked():
-            self.password_input.setEchoMode(QLineEdit.Normal)
-        else:
-            self.password_input.setEchoMode(QLineEdit.Password)
-
-    def select_network(self, item):
-        self.selected_ssid = item.text()
-        print(f"Selected: {self.selected_ssid}")
 
     def scan_networks(self):
         result = subprocess.run(['nmcli', '-t', '-f', 'SSID,SECURITY', 'device', 'wifi', 'list'], stdout=subprocess.PIPE)
@@ -87,7 +68,32 @@ class WifiSelector(QWidget):
                     if ssid and ssid not in networks:
                         icon = "/home/pi/wi-pi-demo/icons/lock.png" if security else "/home/pi/wi-pi-demo/icons/unlock.png"
                         self.network_list.addItem(QListWidgetItem(QIcon(icon), ssid))
+                        self.secured_networks[ssid] = bool(security)
                         networks.add(ssid)
+
+    def select_network(self, item):
+        self.selected_ssid = item.text()
+        print(f"Selected: {self.selected_ssid}")
+
+        is_secured = self.secured_networks.get(self.selected_ssid, False)
+        password = ""
+
+        if is_secured:
+            # Launch on-screen keyboard
+            subprocess.Popen(["matchbox-keyboard"])
+
+            # Ask for password using input dialog
+            password, ok = QInputDialog.getText(self, f"Enter Password for {self.selected_ssid}", "Password:", QInputDialog.Password)
+
+            # Kill keyboard
+            subprocess.call(["pkill", "matchbox-keyboard"])
+
+            if not ok or not password:
+                QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
+                return
+
+        self.password_input = password
+        self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
@@ -96,7 +102,7 @@ class WifiSelector(QWidget):
 
         wifi_data = {
             "wifi_name": self.selected_ssid,
-            "wifi_password": self.password_input.text()
+            "wifi_password": self.password_input
         }
 
         try:
