@@ -7,10 +7,11 @@ import time
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QInputDialog, QMessageBox
+    QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QLineEdit
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
+
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -74,7 +75,8 @@ class WifiSelector(QWidget):
 
         if is_secured:
             # Ask for password using input dialog
-            password, ok = QInputDialog.getText(self, f"Enter Password for {self.selected_ssid}", "Password:", QInputDialog.Password)
+            password, ok = QInputDialog.getText(self, f"Enter Password for {self.selected_ssid}", "Password:", QLineEdit.Password)
+
 
             if not ok or not password:
                 QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
