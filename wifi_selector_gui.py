@@ -1,90 +1,118 @@
 import sys
-import json
-import subprocess
 import os
+import subprocess
+import json
+import threading
+import time
+
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QCheckBox, QInputDialog, QMessageBox
+    QListWidget, QListWidgetItem, QHBoxLayout, QLineEdit, QCheckBox
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
 
-def scan_wifi_networks():
-    try:
-        result = subprocess.check_output(['nmcli', '-t', '-f', 'SSID,SECURITY', 'dev', 'wifi'], encoding='utf-8')
-        networks = []
-        for line in result.strip().split('\n'):
-            if line:
-                parts = line.split(':')
-                ssid = parts[0].strip()
-                security = parts[1].strip() if len(parts) > 1 else ""
-                if ssid and ssid not in [net["ssid"] for net in networks]:
-                    networks.append({"ssid": ssid, "secure": bool(security)})
-        return networks
-    except subprocess.CalledProcessError as e:
-        print("Error scanning networks:", e)
-        return []
-
 class WifiSelector(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Wi-Pi | Wi-Fi Selector")
-        self.setStyleSheet("background-color: #1f1f1f; color: white;")
-        self.setGeometry(100, 100, 320, 480)
+        self.setWindowTitle("Wi-Pi | Admin Dashboard")
+        self.setStyleSheet("background-color: #1e1e1e; color: white;")
+        self.setGeometry(0, 0, 320, 480)
+
+        self.selected_ssid = None
 
         layout = QVBoxLayout()
 
+        # Wi-Pi Logo
+        logo = QLabel()
+        logo.setPixmap(QPixmap("/home/pi/wi-pi-demo/icons/wi-pi-logo.png").scaled(120, 60, Qt.KeepAspectRatio))
+        logo.setAlignment(Qt.AlignCenter)
+        layout.addWidget(logo)
+
         # Header
-        header = QLabel("Available Networks")
-        header.setFont(QFont("Arial", 16, QFont.Bold))
-        header.setAlignment(Qt.AlignCenter)
+        header = QLabel("📶 Available Wi-Fi Networks")
+        header.setFont(QFont("Arial", 14, QFont.Bold))
+        header.setAlignment(Qt.AlignLeft)
         layout.addWidget(header)
 
+        # Wi-Fi List
         self.network_list = QListWidget()
-        self.network_list.setStyleSheet("QListWidget { background-color: #2e2e2e; border: none; } QListWidget::item { padding: 10px; }")
+        self.network_list.setStyleSheet("QListWidget { background-color: #2b2b2b; border: none; }")
         self.network_list.itemClicked.connect(self.select_network)
         layout.addWidget(self.network_list)
 
-        self.setLayout(layout)
-        self.load_networks()
+        # Password Field
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setPlaceholderText("Enter Wi-Fi Password")
+        layout.addWidget(self.password_input)
 
-    def load_networks(self):
-        self.network_list.clear()
-        networks = scan_wifi_networks()
-        for net in networks:
-            icon_path = "/home/pi/wi-pi-demo/icons/lock.png" if net["secure"] else "/home/pi/wi-pi-demo/icons/unlock.png"
-            item = QListWidgetItem(QIcon(icon_path), net["ssid"])
-            item.setData(Qt.UserRole, net)
-            self.network_list.addItem(item)
+        # Toggle Password Visibility
+        self.show_password = QCheckBox("Show Password")
+        self.show_password.stateChanged.connect(self.toggle_password_visibility)
+        layout.addWidget(self.show_password)
+
+        # Connect Button
+        connect_button = QPushButton("✅ Connect & Generate QR/NFC")
+        connect_button.clicked.connect(self.save_and_launch)
+        connect_button.setStyleSheet("QPushButton { background-color: #4caf50; font-size: 14px; padding: 10px; }")
+        layout.addWidget(connect_button)
+
+        self.setLayout(layout)
+
+        # Start scanning in a thread
+        threading.Thread(target=self.scan_networks, daemon=True).start()
+
+    def toggle_password_visibility(self):
+        if self.show_password.isChecked():
+            self.password_input.setEchoMode(QLineEdit.Normal)
+        else:
+            self.password_input.setEchoMode(QLineEdit.Password)
 
     def select_network(self, item):
-        net = item.data(Qt.UserRole)
-        ssid = net["ssid"]
-        password = ""
+        self.selected_ssid = item.text()
+        print(f"Selected: {self.selected_ssid}")
 
-        if net["secure"]:
-            password, ok = QInputDialog.getText(self, "Enter Password", f"Enter password for {ssid}:")
-            if not ok or not password:
-                QMessageBox.warning(self, "Cancelled", "Wi-Fi selection cancelled.")
-                return
+    def scan_networks(self):
+        result = subprocess.run(['nmcli', '-t', '-f', 'SSID,SECURITY', 'device', 'wifi', 'list'], stdout=subprocess.PIPE)
+        output = result.stdout.decode()
+        networks = set()
 
-        # Save to selected_network.json
-        try:
-            with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
-                json.dump({"wifi_name": ssid, "wifi_password": password}, f)
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save network: {e}")
+        for line in output.strip().split('\n'):
+            if line:
+                parts = line.split(':')
+                if len(parts) >= 1:
+                    ssid = parts[0].strip()
+                    security = parts[1] if len(parts) > 1 else ''
+                    if ssid and ssid not in networks:
+                        icon = "/home/pi/wi-pi-demo/icons/lock.png" if security else "/home/pi/wi-pi-demo/icons/unlock.png"
+                        self.network_list.addItem(QListWidgetItem(QIcon(icon), ssid))
+                        networks.add(ssid)
+
+    def save_and_launch(self):
+        if not self.selected_ssid:
+            print("⚠️ Please select a Wi-Fi network.")
             return
 
-        # Launch main_screen.py
+        wifi_data = {
+            "wifi_name": self.selected_ssid,
+            "wifi_password": self.password_input.text()
+        }
+
         try:
-            subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
-            self.close()
+            with open("/home/pi/wi-pi-demo/selected_network.json", "w") as f:
+                json.dump(wifi_data, f)
+            print("✅ Network info saved. Launching QR/NFC screen...")
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to launch QR screen: {e}")
+            print(f"Error saving network info: {e}")
+            return
+
+        # Launch main_screen.py in background
+        subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
+        self.close()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = WifiSelector()
-    window.show()
+    window.showFullScreen()
     sys.exit(app.exec_())
