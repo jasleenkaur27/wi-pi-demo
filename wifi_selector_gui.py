@@ -67,34 +67,36 @@ class WifiSelector(QWidget):
                         networks.add(ssid)
 
     def select_network(self, item):
-        self.selected_ssid = item.text()
-        print(f"Selected: {self.selected_ssid}")
+    self.selected_ssid = item.text()
+    print(f"Selected: {self.selected_ssid}")
 
-        is_secured = self.secured_networks.get(self.selected_ssid, False)
-        password = ""
+    is_secured = self.secured_networks.get(self.selected_ssid, False)
+    password = ""
 
-        if is_secured:
-            # Ask for password using input dialog
-            password, ok = QInputDialog.getText(self, f"Enter Password for {self.selected_ssid}", "Password:", QLineEdit.Password)
+    if is_secured:
+        # Launch Onboard keyboard
+        subprocess.Popen(["onboard"])
+        time.sleep(1)  # Optional: Give it a moment to appear
 
+        # Ask for password using QInputDialog
+        from PyQt5.QtWidgets import QLineEdit
+        password, ok = QInputDialog.getText(
+            self,
+            f"Enter Password for {self.selected_ssid}",
+            "Password:",
+            QLineEdit.Password
+        )
 
-            if not ok or not password:
-                QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
-                return
+        # Kill Onboard keyboard
+        subprocess.call(["pkill", "onboard"])
 
-        self.password_input = password
-        self.confirm_and_launch()
+        if not ok or not password:
+            QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
+            return
 
-    def confirm_and_launch(self):
-        confirm = QMessageBox()
-        confirm.setWindowTitle("Generate QR/NFC")
-        confirm.setText(f"Connect to {self.selected_ssid}?\nThis will generate a QR code and write NFC tag.")
-        confirm.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        confirm.setStyleSheet("QMessageBox QPushButton { background-color: #2196F3; color: white; padding: 6px; }")
-        result = confirm.exec_()
+    self.password_input = password
+    self.save_and_launch()
 
-        if result == QMessageBox.Ok:
-            self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
