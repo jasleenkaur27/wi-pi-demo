@@ -7,11 +7,10 @@ import time
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QLineEdit
+    QListWidget, QListWidgetItem, QLineEdit, QMessageBox
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
-
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -67,36 +66,51 @@ class WifiSelector(QWidget):
                         networks.add(ssid)
 
     def select_network(self, item):
-    self.selected_ssid = item.text()
-    print(f"Selected: {self.selected_ssid}")
+        self.selected_ssid = item.text()
+        print(f"Selected: {self.selected_ssid}")
 
-    is_secured = self.secured_networks.get(self.selected_ssid, False)
-    password = ""
+        is_secured = self.secured_networks.get(self.selected_ssid, False)
+        password = ""
 
-    if is_secured:
-        # Launch Onboard keyboard
-        subprocess.Popen(["onboard"])
-        time.sleep(1)  # Optional: Give it a moment to appear
+        if is_secured:
+            keyboard_process = subprocess.Popen(["onboard"])  # Launch on-screen keyboard
 
-        # Ask for password using QInputDialog
-        from PyQt5.QtWidgets import QLineEdit
-        password, ok = QInputDialog.getText(
-            self,
-            f"Enter Password for {self.selected_ssid}",
-            "Password:",
-            QLineEdit.Password
-        )
+            # Use a custom password prompt
+            pw_prompt = QWidget()
+            pw_prompt.setWindowTitle(f"Enter Password for {self.selected_ssid}")
+            pw_prompt.setStyleSheet("background-color: #1e1e1e; color: white;")
+            pw_layout = QVBoxLayout()
 
-        # Kill Onboard keyboard
-        subprocess.call(["pkill", "onboard"])
+            label = QLabel(f"Password for {self.selected_ssid}:")
+            label.setFont(QFont("Arial", 12))
+            pw_layout.addWidget(label)
 
-        if not ok or not password:
-            QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
-            return
+            pw_input = QLineEdit()
+            pw_input.setEchoMode(QLineEdit.Password)
+            pw_input.setFont(QFont("Arial", 12))
+            pw_input.setStyleSheet("background-color: white; color: black;")
+            pw_layout.addWidget(pw_input)
 
-    self.password_input = password
-    self.save_and_launch()
+            submit_btn = QPushButton("Generate QR/NFC")
+            submit_btn.setStyleSheet("background-color: #007BFF; color: white; padding: 10px; font-size: 14px;")
+            pw_layout.addWidget(submit_btn)
 
+            def on_submit():
+                password_val = pw_input.text()
+                if not password_val:
+                    QMessageBox.warning(self, "Missing Password", "⚠️ Password is required.")
+                    return
+                self.password_input = password_val
+                keyboard_process.terminate()
+                pw_prompt.close()
+                self.save_and_launch()
+
+            submit_btn.clicked.connect(on_submit)
+            pw_prompt.setLayout(pw_layout)
+            pw_prompt.show()
+        else:
+            self.password_input = ""
+            self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
