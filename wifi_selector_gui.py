@@ -43,12 +43,6 @@ class WifiSelector(QWidget):
         self.network_list.itemClicked.connect(self.select_network)
         layout.addWidget(self.network_list)
 
-        # Connect Button
-        connect_button = QPushButton("✅ Connect & Generate QR/NFC")
-        connect_button.clicked.connect(self.save_and_launch)
-        connect_button.setStyleSheet("QPushButton { background-color: #4caf50; font-size: 14px; padding: 10px; }")
-        layout.addWidget(connect_button)
-
         self.setLayout(layout)
 
         # Start scanning in a thread
@@ -79,21 +73,26 @@ class WifiSelector(QWidget):
         password = ""
 
         if is_secured:
-            # Launch on-screen keyboard
-            subprocess.Popen(["matchbox-keyboard"])
-
             # Ask for password using input dialog
             password, ok = QInputDialog.getText(self, f"Enter Password for {self.selected_ssid}", "Password:", QInputDialog.Password)
-
-            # Kill keyboard
-            subprocess.call(["pkill", "matchbox-keyboard"])
 
             if not ok or not password:
                 QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
                 return
 
         self.password_input = password
-        self.save_and_launch()
+        self.confirm_and_launch()
+
+    def confirm_and_launch(self):
+        confirm = QMessageBox()
+        confirm.setWindowTitle("Generate QR/NFC")
+        confirm.setText(f"Connect to {self.selected_ssid}?\nThis will generate a QR code and write NFC tag.")
+        confirm.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        confirm.setStyleSheet("QMessageBox QPushButton { background-color: #2196F3; color: white; padding: 6px; }")
+        result = confirm.exec_()
+
+        if result == QMessageBox.Ok:
+            self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
