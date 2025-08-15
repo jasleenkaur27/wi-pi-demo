@@ -49,7 +49,7 @@ class WifiSelector(QWidget):
         super().__init__()
         self.setWindowTitle("Wi-Pi | Admin Dashboard")
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
-        self.setGeometry(0, 0, 800, 480)  # Top half of 800x480 screen
+        self.setGeometry(0, 0, 800, 600)  # Top half of 800x480 screen
 
         self.selected_ssid = None
         self.password_input = ""
