@@ -48,8 +48,9 @@ class WifiSelector(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wi-Pi | Admin Dashboard")
-        self.setStyleSheet("background-color: #1e1e1e; color: white;")
-        self.setGeometry(0, 0, 800, 480)  # Top half of 800x480 screen
+        self.setStyleSheet("background-color: #1e1e1e; color: whit
+        self.setGeometry(0, 0, 800, 600)  # Top half of 800x480 screen
+
 
         self.selected_ssid = None
         self.password_input = ""
@@ -98,27 +99,33 @@ class WifiSelector(QWidget):
                         networks.add(ssid)
 
     def select_network(self, item):
-        self.selected_ssid = item.text()
-        print(f"Selected: {self.selected_ssid}")
+    self.selected_ssid = item.text()
+    print(f"Selected: {self.selected_ssid}")
 
-        is_secured = self.secured_networks.get(self.selected_ssid, False)
-        password = ""
+    is_secured = self.secured_networks.get(self.selected_ssid, False)
+    password = ""
 
-        if is_secured:
-            # Show password dialog (keyboard should already be running)
-            prompt = PasswordPrompt(self.selected_ssid)
-            prompt.password_input.setFocus()
-            result = prompt.exec_()
+    if is_secured:
+        # Launch matchbox-keyboard just before password prompt
+        kb_proc = subprocess.Popen(["matchbox-keyboard", "-geometry", "800x160+0+320"])
 
-            if result == QDialog.Accepted:
-                password = prompt.password_input.text()
-                if not password:
-                    return
-            else:
-                return  # Cancelled
+        # Show password prompt
+        prompt = PasswordPrompt(self.selected_ssid)
+        prompt.password_input.setFocus()
+        result = prompt.exec_()
 
-        self.password_input = password
-        self.save_and_launch()
+        # Close keyboard after dialog
+        kb_proc.terminate()
+
+        if result == QDialog.Accepted:
+            password = prompt.password_input.text()
+            if not password:
+                return
+        else:
+            return  # Cancelled
+
+    self.password_input = password
+    self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
