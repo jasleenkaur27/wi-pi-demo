@@ -17,8 +17,9 @@ class PasswordPrompt(QDialog):
         super().__init__()
         self.setWindowTitle(f"Enter Password for {ssid}")
         self.setFixedSize(300, 150)
+        self.move(250, 50)  # Place in upper half of screen
         self.setStyleSheet("background-color: #2b2b2b; color: white;")
-        self.setWindowFlags(Qt.FramelessWindowHint)  # Optional: hide title bar
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
         layout = QVBoxLayout()
 
@@ -48,7 +49,7 @@ class WifiSelector(QWidget):
         super().__init__()
         self.setWindowTitle("Wi-Pi | Admin Dashboard")
         self.setStyleSheet("background-color: #1e1e1e; color: white;")
-        self.setGeometry(0, 0, 320, 480)
+        self.setGeometry(0, 0, 800, 240)  # Top half of 800x480 screen
 
         self.selected_ssid = None
         self.password_input = ""
@@ -104,16 +105,10 @@ class WifiSelector(QWidget):
         password = ""
 
         if is_secured:
-            # Launch keyboard at bottom
-            keyboard_proc = subprocess.Popen(["matchbox-keyboard", "-geometry", "800x240+0+240"])
-
-            # Show password prompt
+            # Show password dialog (keyboard should already be running)
             prompt = PasswordPrompt(self.selected_ssid)
-            prompt.password_input.setFocus()  # ensure QLineEdit is focused
+            prompt.password_input.setFocus()
             result = prompt.exec_()
-
-            # Kill keyboard
-            keyboard_proc.terminate()
 
             if result == QDialog.Accepted:
                 password = prompt.password_input.text()
@@ -151,5 +146,5 @@ class WifiSelector(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = WifiSelector()
-    window.showFullScreen()
+    window.show()  # No fullscreen
     sys.exit(app.exec_())
