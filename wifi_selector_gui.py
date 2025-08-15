@@ -18,8 +18,10 @@ class PasswordPrompt(QDialog):
         self.setWindowTitle(f"Enter Password for {ssid}")
         self.setFixedSize(300, 150)
         self.setStyleSheet("background-color: #2b2b2b; color: white;")
+        self.setWindowFlags(Qt.FramelessWindowHint)  # Optional: hide title bar
 
         layout = QVBoxLayout()
+
         label = QLabel(f"Password for {ssid}:")
         label.setFont(QFont("Arial", 12))
         layout.addWidget(label)
@@ -102,11 +104,16 @@ class WifiSelector(QWidget):
         password = ""
 
         if is_secured:
-            # Show custom popup
-            subprocess.Popen(["matchbox-keyboard"])
+            # Launch keyboard at bottom
+            keyboard_proc = subprocess.Popen(["matchbox-keyboard", "-geometry", "800x240+0+240"])
+
+            # Show password prompt
             prompt = PasswordPrompt(self.selected_ssid)
+            prompt.password_input.setFocus()  # ensure QLineEdit is focused
             result = prompt.exec_()
-            subprocess.call(["pkill", "matchbox-keyboard"])
+
+            # Kill keyboard
+            keyboard_proc.terminate()
 
             if result == QDialog.Accepted:
                 password = prompt.password_input.text()
