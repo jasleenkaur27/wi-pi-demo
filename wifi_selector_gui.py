@@ -1,8 +1,8 @@
 import sys
-import os
 import subprocess
 import json
 import threading
+import os
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
@@ -17,7 +17,8 @@ class PasswordPrompt(QDialog):
         super().__init__()
         self.setWindowTitle(f"Enter Password for {ssid}")
         self.setFixedSize(300, 150)
-        self.move(250, 50)  # Place in upper half of screen
+        # place in upper area so it doesn't overlap keyboard
+        self.move(250, 50)
         self.setStyleSheet("background-color: #2b2b2b; color: white;")
         self.setWindowFlags(Qt.WindowStaysOnTopHint)
 
@@ -32,14 +33,14 @@ class PasswordPrompt(QDialog):
         self.password_input.setFont(QFont("Arial", 12))
         layout.addWidget(self.password_input)
 
-        button_layout = QHBoxLayout()
+        btns = QHBoxLayout()
         ok_btn = QPushButton("OK")
         ok_btn.clicked.connect(self.accept)
         cancel_btn = QPushButton("Cancel")
         cancel_btn.clicked.connect(self.reject)
-        button_layout.addWidget(ok_btn)
-        button_layout.addWidget(cancel_btn)
-        layout.addLayout(button_layout)
+        btns.addWidget(ok_btn)
+        btns.addWidget(cancel_btn)
+        layout.addLayout(btns)
 
         self.setLayout(layout)
 
@@ -48,9 +49,10 @@ class WifiSelector(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Wi-Pi | Admin Dashboard")
-        self.setStyleSheet("background-color: #1e1e1e; color: whit
-        self.setGeometry(0, 0, 800, 600)  # Top half of 800x480 screen
+        self.setStyleSheet("background-color: #1e1e1e; color: white;")
 
+        # Top portion of a typical 800x480 screen; leave space for keyboard
+        self.setGeometry(0, 0, 800, 320)
 
         self.selected_ssid = None
         self.password_input = ""
@@ -58,9 +60,13 @@ class WifiSelector(QWidget):
 
         layout = QVBoxLayout()
 
-        # Wi-Pi Logo
+        # Wi-Pi Logo (guard if file missing)
         logo = QLabel()
-        logo.setPixmap(QPixmap("/home/pi/wi-pi-demo/icons/wi-pi-logo.png").scaled(120, 60, Qt.KeepAspectRatio))
+        logo_path = "/home/pi/wi-pi-demo/icons/wi-pi-logo.png"
+        if os.path.exists(logo_path):
+            pm = QPixmap(logo_path).scaled(120, 60, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            if not pm.isNull():
+                logo.setPixmap(pm)
         logo.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo)
 
@@ -72,60 +78,73 @@ class WifiSelector(QWidget):
 
         # Wi-Fi List
         self.network_list = QListWidget()
-        self.network_list.setStyleSheet("QListWidget { background-color: #2b2b2b; border: none; }")
+        self.network_list.setStyleSheet(
+            "QListWidget { background-color: #2b2b2b; border: none; }"
+        )
         self.network_list.itemClicked.connect(self.select_network)
         layout.addWidget(self.network_list)
 
         self.setLayout(layout)
 
-        # Start scanning in a thread
+        # Start scanning in a background thread
         threading.Thread(target=self.scan_networks, daemon=True).start()
 
     def scan_networks(self):
-        result = subprocess.run(['nmcli', '-t', '-f', 'SSID,SECURITY', 'device', 'wifi', 'list'], stdout=subprocess.PIPE)
-        output = result.stdout.decode()
-        networks = set()
+        try:
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "SSID,SECURITY", "device", "wifi", "list"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            output = result.stdout.decode(errors="ignore")
+        except Exception as e:
+            print(f"nmcli error: {e}")
+            return
 
-        for line in output.strip().split('\n'):
-            if line:
-                parts = line.split(':')
-                if len(parts) >= 1:
-                    ssid = parts[0].strip()
-                    security = parts[1] if len(parts) > 1 else ''
-                    if ssid and ssid not in networks:
-                        icon = "/home/pi/wi-pi-demo/icons/lock.png" if security else "/home/pi/wi-pi-demo/icons/unlock.png"
-                        self.network_list.addItem(QListWidgetItem(QIcon(icon), ssid))
-                        self.secured_networks[ssid] = bool(security)
-                        networks.add(ssid)
+        seen = set()
+        for line in output.strip().split("\n"):
+            if not line:
+                continue
+            parts = line.split(":")
+            ssid = parts[0].strip()
+            security = parts[1] if len(parts) > 1 else ""
+            if not ssid or ssid in seen:
+                continue
+            seen.add(ssid)
+            icon_path = "/home/pi/wi-pi-demo/icons/lock.png" if security else "/home/pi/wi-pi-demo/icons/unlock.png"
+            icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
+            # NOTE: UI from a thread usually needs signals; on Pi it often works, but if it flickers we can move to signals later.
+            self.network_list.addItem(QListWidgetItem(icon, ssid))
+            self.secured_networks[ssid] = bool(security)
 
     def select_network(self, item):
-    self.selected_ssid = item.text()
-    print(f"Selected: {self.selected_ssid}")
+        self.selected_ssid = item.text()
+        print(f"Selected: {self.selected_ssid}")
 
-    is_secured = self.secured_networks.get(self.selected_ssid, False)
-    password = ""
+        is_secured = self.secured_networks.get(self.selected_ssid, False)
+        password = ""
 
-    if is_secured:
-        # Launch matchbox-keyboard just before password prompt
-        kb_proc = subprocess.Popen(["matchbox-keyboard", "-geometry", "800x160+0+320"])
+        if is_secured:
+            # Launch on-screen keyboard at bottom while prompt is open
+            kb_proc = subprocess.Popen(["matchbox-keyboard", "-geometry", "800x160+0+320"])
+            try:
+                prompt = PasswordPrompt(self.selected_ssid)
+                prompt.password_input.setFocus()
+                result = prompt.exec_()
+            finally:
+                # Close keyboard after dialog no matter what
+                kb_proc.terminate()
 
-        # Show password prompt
-        prompt = PasswordPrompt(self.selected_ssid)
-        prompt.password_input.setFocus()
-        result = prompt.exec_()
+            if result == QDialog.Accepted:
+                password = prompt.password_input.text().strip()
+                if not password:
+                    return
+            else:
+                return  # cancelled
 
-        # Close keyboard after dialog
-        kb_proc.terminate()
-
-        if result == QDialog.Accepted:
-            password = prompt.password_input.text()
-            if not password:
-                return
-        else:
-            return  # Cancelled
-
-    self.password_input = password
-    self.save_and_launch()
+        self.password_input = password
+        self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
@@ -134,7 +153,7 @@ class WifiSelector(QWidget):
 
         wifi_data = {
             "wifi_name": self.selected_ssid,
-            "wifi_password": self.password_input
+            "wifi_password": self.password_input,
         }
 
         try:
@@ -145,13 +164,13 @@ class WifiSelector(QWidget):
             print(f"Error saving network info: {e}")
             return
 
-        # Launch main_screen.py
+        # Launch main_screen.py (expects qrcode / pillow installed)
         subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
         self.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = WifiSelector()
-    window.show()  # No fullscreen
+    window.show()  # not fullscreen; leaves room for keyboard
     sys.exit(app.exec_())
