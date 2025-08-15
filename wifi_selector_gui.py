@@ -3,14 +3,43 @@ import os
 import subprocess
 import json
 import threading
-import time
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QLineEdit
+    QListWidget, QListWidgetItem, QDialog, QLineEdit, QHBoxLayout
 )
 from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
+
+
+class PasswordPrompt(QDialog):
+    def __init__(self, ssid):
+        super().__init__()
+        self.setWindowTitle(f"Enter Password for {ssid}")
+        self.setFixedSize(300, 150)
+        self.setStyleSheet("background-color: #2b2b2b; color: white;")
+
+        layout = QVBoxLayout()
+        label = QLabel(f"Password for {ssid}:")
+        label.setFont(QFont("Arial", 12))
+        layout.addWidget(label)
+
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setFont(QFont("Arial", 12))
+        layout.addWidget(self.password_input)
+
+        button_layout = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(self.accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(ok_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
 
 class WifiSelector(QWidget):
     def __init__(self):
@@ -43,15 +72,6 @@ class WifiSelector(QWidget):
         self.network_list.itemClicked.connect(self.select_network)
         layout.addWidget(self.network_list)
 
-        # Connect Button (Initially hidden)
-        self.connect_button = QPushButton("✅ Connect & Generate QR/NFC")
-        self.connect_button.clicked.connect(self.save_and_launch)
-        self.connect_button.setStyleSheet(
-            "QPushButton { background-color: #007bff; font-size: 14px; padding: 10px; }"
-        )
-        self.connect_button.setVisible(False)
-        layout.addWidget(self.connect_button)
-
         self.setLayout(layout)
 
         # Start scanning in a thread
@@ -82,30 +102,21 @@ class WifiSelector(QWidget):
         password = ""
 
         if is_secured:
-            # Launch full keyboard layout
-            subprocess.Popen([
-                "matchbox-keyboard",
-                "-layout", "/usr/share/matchbox-keyboard/layouts/keyboard.xml"
-            ])
-            time.sleep(0.5)
-
-            # Show password input dialog
-            password, ok = QInputDialog.getText(
-                self,
-                f"Enter Password for {self.selected_ssid}",
-                "Password:",
-                QLineEdit.Password
-            )
-
-            # Close keyboard
+            # Show custom popup
+            subprocess.Popen(["matchbox-keyboard"])
+            prompt = PasswordPrompt(self.selected_ssid)
+            result = prompt.exec_()
             subprocess.call(["pkill", "matchbox-keyboard"])
 
-            if not ok or not password:
-                QMessageBox.warning(self, "Missing Password", "⚠️ Password is required for secured networks.")
-                return
+            if result == QDialog.Accepted:
+                password = prompt.password_input.text()
+                if not password:
+                    return
+            else:
+                return  # Cancelled
 
         self.password_input = password
-        self.connect_button.setVisible(True)
+        self.save_and_launch()
 
     def save_and_launch(self):
         if not self.selected_ssid:
@@ -125,9 +136,10 @@ class WifiSelector(QWidget):
             print(f"Error saving network info: {e}")
             return
 
-        # Launch main_screen.py in background
+        # Launch main_screen.py
         subprocess.Popen(["python3", "/home/pi/wi-pi-demo/main_screen.py"])
         self.close()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
